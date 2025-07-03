@@ -8,11 +8,13 @@ const App = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const BASE_URL = "https://xat-fg8p.onrender.com"; // Explicitly set backend URL
 
-  const addFlashMessage = (message, type = "success") => {
-    setFlashMessages([...flashMessages, { message, type }]);
-    setTimeout(() => setFlashMessages((msgs) => msgs.slice(1)), 5000);
-  };
-
+  const addFlashMessage = useCallback((message, type = "success") => {
+    setFlashMessages((prevMessages) => [...prevMessages, { message, type }]);
+    setTimeout(() => {
+      setFlashMessages((msgs) => msgs.slice(1));
+    }, 5000);
+  }, []);
+  
   const handleSetupBot = async (e) => {
     e.preventDefault();
     console.log("Sending POST to:", `${BASE_URL}/api/setup_bot`, {
