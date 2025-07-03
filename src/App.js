@@ -3,7 +3,6 @@
 import { React, useState, useEffect } from "react"; // For using JSX and React components
 import ReactDOM from "react-dom"; // If you're rendering something directly
 import axios from "axios"; // For making HTTP requests
-const BASE_URL = "https://xat-fg8p.onrender.com"; // Explicitly set backend URL
 
 const App = () => {
   const [botToken, setBotToken] = useState("");
@@ -11,6 +10,7 @@ const App = () => {
   const [flashMessages, setFlashMessages] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [userId, setUserId] = useState(null);
+  const BASE_URL = "https://xat-fg8p.onrender.com"; // Explicitly set backend URL
 
   const addFlashMessage = (message, type = "success") => {
     setFlashMessages([...flashMessages, { message, type }]);
