@@ -51,7 +51,7 @@ const App = () => {
         addFlashMessage("Error loading dashboard", "error");
       }
     },
-    [addFlashMessage]
+    []
   ); // Added addFlashMessage to dependencies
 
   const copyToClipboard = (text, buttonRef) => {
