@@ -1,15 +1,11 @@
-// Add these at the top of your file
-
-import { React, useState, useEffect } from "react"; // For using JSX and React components
-import ReactDOM from "react-dom"; // If you're rendering something directly
-import axios from "axios"; // For making HTTP requests
+import { React, useState, useEffect, useCallback } from "react";
+import axios from "axios";
 
 const App = () => {
   const [botToken, setBotToken] = useState("");
   const [alertType, setAlertType] = useState("personal");
   const [flashMessages, setFlashMessages] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
-  const [userId, setUserId] = useState(null);
   const BASE_URL = "https://xat-fg8p.onrender.com"; // Explicitly set backend URL
 
   const addFlashMessage = (message, type = "success") => {
@@ -28,7 +24,6 @@ const App = () => {
         bot_token: botToken,
         alert_type: alertType,
       });
-      setUserId(response.data.user_id);
       addFlashMessage(
         `Bot @${response.data.bot_username} verified successfully! Use your unique authentication command in the bot.`
       );
@@ -42,7 +37,7 @@ const App = () => {
     }
   };
 
-  const fetchDashboard = async (id) => {
+  const fetchDashboard = useCallback(async (id) => {
     console.log("Fetching dashboard from:", `${BASE_URL}/api/dashboard/${id}`);
     try {
       const response = await axios.get(`${BASE_URL}/api/dashboard/${id}`);
@@ -51,7 +46,7 @@ const App = () => {
       console.error("Dashboard fetch error:", error);
       addFlashMessage("Error loading dashboard", "error");
     }
-  };
+  }, []); // Empty deps since BASE_URL is constant
 
   const copyToClipboard = (text, buttonRef) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -72,10 +67,9 @@ const App = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = urlParams.get("user_id");
     if (userId) {
-      setUserId(userId);
       fetchDashboard(userId);
     }
-  }, []);
+  }, [fetchDashboard]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -135,6 +129,7 @@ const App = () => {
                     <a
                       href="https://t.me/BotFather"
                       target="_blank"
+                      rel="noreferrer"
                       className="text-blue-400"
                     >
                       @BotFather
@@ -177,6 +172,7 @@ const App = () => {
                   <a
                     href="https://t.me/BotFather"
                     target="_blank"
+                    rel="noreferrer"
                     className="text-blue-400"
                   >
                     @BotFather
@@ -190,7 +186,7 @@ const App = () => {
                   chat
                 </li>
                 <li className="mb-2">
-                  Copy the generated webhook URL to your TradingView alerts
+                  Copy the generated webhook URL to your TradingView Alerts
                 </li>
                 <li>Receive formatted alerts automatically!</li>
               </ol>
