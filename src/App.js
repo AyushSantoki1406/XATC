@@ -37,16 +37,22 @@ const App = () => {
     }
   };
 
-  const fetchDashboard = useCallback(async (id) => {
-    console.log("Fetching dashboard from:", `${BASE_URL}/api/dashboard/${id}`);
-    try {
-      const response = await axios.get(`${BASE_URL}/api/dashboard/${id}`);
-      setDashboardData(response.data);
-    } catch (error) {
-      console.error("Dashboard fetch error:", error);
-      addFlashMessage("Error loading dashboard", "error");
-    }
-  }, []); // Empty deps since BASE_URL is constant
+  const fetchDashboard = useCallback(
+    async (id) => {
+      console.log(
+        "Fetching dashboard from:",
+        `${BASE_URL}/api/dashboard/${id}`
+      );
+      try {
+        const response = await axios.get(`${BASE_URL}/api/dashboard/${id}`);
+        setDashboardData(response.data);
+      } catch (error) {
+        console.error("Dashboard fetch error:", error);
+        addFlashMessage("Error loading dashboard", "error");
+      }
+    },
+    [addFlashMessage]
+  ); // Added addFlashMessage to dependencies
 
   const copyToClipboard = (text, buttonRef) => {
     navigator.clipboard.writeText(text).then(() => {
