@@ -1,425 +1,418 @@
-import { React, useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useParams,
+  useNavigate,
+} from "react-router-dom";
 import axios from "axios";
 
-const App = () => {
+const API_BASE_URL = "https://xat-fg8p.onrender.com";
+
+// Generate or retrieve session ID
+const getSessionId = () => {
+  let sessionId = localStorage.getItem("x-session-id");
+  if (!sessionId) {
+    sessionId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    localStorage.setItem("x-session-id", sessionId);
+  }
+  return sessionId;
+};
+
+// Axios instance with session ID
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "X-Session-ID": getSessionId(),
+  },
+});
+
+// Flash Messages Component
+const FlashMessages = ({ messages, setMessages }) => {
+  if (!messages || messages.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {messages.map((msg, index) => (
+        <div
+          key={index}
+          className={`p-4 rounded-lg flex justify-between items-center text-white ${
+            msg.type === "error" ? "bg-red-600" : "bg-green-600"
+          }`}
+        >
+          <span>{msg.message}</span>
+          <button
+            className="text-white hover:text-gray-200"
+            onClick={() => setMessages(messages.filter((_, i) => i !== index))}
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Setup Component
+const Setup = () => {
   const [botToken, setBotToken] = useState("");
   const [alertType, setAlertType] = useState("personal");
   const [flashMessages, setFlashMessages] = useState([]);
-  const [dashboardData, setDashboardData] = useState(null);
-  const BASE_URL = "https://xat-fg8p.onrender.com"; // Explicitly set backend URL
+  const navigate = useNavigate();
 
-  const addFlashMessage = useCallback((message, type = "success") => {
-    setFlashMessages((prevMessages) => [...prevMessages, { message, type }]);
-    setTimeout(() => {
-      setFlashMessages((msgs) => msgs.slice(1));
-    }, 5000);
-  }, []);
-  
-  const handleSetupBot = async (e) => {
-    e.preventDefault();
-    console.log("Sending POST to:", `${BASE_URL}/api/setup_bot`, {
-      bot_token: botToken,
-      alert_type: alertType,
-    });
+  const handleSetup = async () => {
     try {
-      const response = await axios.post(`${BASE_URL}/api/setup_bot`, {
+      const response = await axiosInstance.post("/setup", {
         bot_token: botToken,
         alert_type: alertType,
       });
-      addFlashMessage(
-        `Bot @${response.data.bot_username} verified successfully! Use your unique authentication command in the bot.`
-      );
-      fetchDashboard(response.data.user_id);
-    } catch (error) {
-      console.error("Setup bot error:", error);
-      addFlashMessage(
-        error.response?.data?.error || "Error setting up bot",
-        "error"
-      );
-    }
-  };
-
-  const fetchDashboard = useCallback(
-    async (id) => {
-      console.log(
-        "Fetching dashboard from:",
-        `${BASE_URL}/api/dashboard/${id}`
-      );
-      try {
-        const response = await axios.get(`${BASE_URL}/api/dashboard/${id}`);
-        setDashboardData(response.data);
-      } catch (error) {
-        console.error("Dashboard fetch error:", error);
-        addFlashMessage("Error loading dashboard", "error");
+      if (response.headers["x-session-id"]) {
+        localStorage.setItem("x-session-id", response.headers["x-session-id"]);
+        axiosInstance.defaults.headers["X-Session-ID"] =
+          response.headers["x-session-id"];
       }
-    },
-    []
-  ); // Added addFlashMessage to dependencies
-
-  const copyToClipboard = (text, buttonRef) => {
-    navigator.clipboard.writeText(text).then(() => {
-      const button = buttonRef.current;
-      const originalHtml = button.innerHTML;
-      button.innerHTML = '<i class="fas fa-check"></i>';
-      button.classList.remove("bg-gray-600", "hover:bg-gray-700");
-      button.classList.add("bg-green-500", "hover:bg-green-600");
-      setTimeout(() => {
-        button.innerHTML = originalHtml;
-        button.classList.remove("bg-green-500", "hover:bg-green-600");
-        button.classList.add("bg-gray-600", "hover:bg-gray-700");
-      }, 2000);
-    });
-  };
-
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get("user_id");
-    if (userId) {
-      fetchDashboard(userId);
+      setFlashMessages([
+        { message: "Bot configured successfully!", type: "success" },
+      ]);
+      // Redirect to dashboard (server redirects to /dashboard/:userId)
+      const userId =
+        response.headers.location?.match(/\/dashboard\/(\d+)/)?.[1];
+      if (userId) navigate(`/dashboard/${userId}`);
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.error ||
+        "An error occurred while setting up the bot";
+      setFlashMessages([{ message: errorMsg, type: "error" }]);
     }
-  }, [fetchDashboard]);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <nav className="bg-gray-800 p-4">
         <div className="container mx-auto">
-          <a href="/" className="text-xl font-bold flex items-center">
+          <span className="text-xl font-bold">
             <i className="fas fa-robot mr-2"></i>TradingView Bot
-          </a>
+          </span>
         </div>
       </nav>
-
-      <main className="container mx-auto p-4">
-        {flashMessages.map((msg, index) => (
-          <div
-            key={index}
-            className={`alert p-4 mb-4 rounded-lg ${
-              msg.type === "error" ? "bg-red-500" : "bg-green-500"
-            }`}
-          >
-            {msg.message}
-            <button
-              className="ml-2"
-              onClick={() =>
-                setFlashMessages((msgs) => msgs.filter((_, i) => i !== index))
-              }
-            >
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
-        ))}
-
-        {!dashboardData ? (
-          <div className="max-w-lg mx-auto mt-8">
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-bold mb-4 flex items-center">
-                <i className="fas fa-plug mr-2"></i>Connect Your Telegram Bot
-              </h2>
-              <p className="text-gray-400 mb-4">
-                Connect your Telegram bot to receive TradingView alerts
-                automatically.
-              </p>
-              <form onSubmit={handleSetupBot}>
+      <div className="container mx-auto mt-4 px-4">
+        <FlashMessages
+          messages={flashMessages}
+          setMessages={setFlashMessages}
+        />
+        <div className="flex justify-center">
+          <div className="w-full max-w-2xl">
+            <div className="bg-gray-800 rounded-lg">
+              <div className="p-4 border-b border-gray-700">
+                <h3 className="text-lg font-semibold">
+                  <i className="fas fa-cog mr-2"></i>Connect Telegram Bot
+                </h3>
+              </div>
+              <div className="p-4">
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">
-                    <i className="fas fa-key mr-2"></i>Bot Token
+                  <label className="block text-sm font-medium mb-1">
+                    Bot Token
                   </label>
                   <input
                     type="text"
-                    className="w-full p-2 bg-gray-700 rounded-lg"
+                    className="w-full p-2 bg-gray-700 rounded border border-gray-600 text-white"
                     value={botToken}
                     onChange={(e) => setBotToken(e.target.value)}
                     placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
                     required
                   />
-                  <p className="text-sm text-gray-400 mt-1">
-                    Get your bot token from{" "}
-                    <a
-                      href="https://t.me/BotFather"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-400"
-                    >
-                      @BotFather
-                    </a>{" "}
-                    on Telegram.
+                  <p className="text-xs text-gray-400 mt-1">
+                    Get your bot token from @BotFather on Telegram
                   </p>
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">
-                    <i className="fas fa-bell mr-2"></i>Where to receive alerts?
+                  <label className="block text-sm font-medium mb-1">
+                    Alert Type
                   </label>
                   <select
-                    className="w-full p-2 bg-gray-700 rounded-lg"
+                    className="w-full p-2 bg-gray-700 rounded border border-gray-600 text-white"
                     value={alertType}
                     onChange={(e) => setAlertType(e.target.value)}
                     required
                   >
-                    <option value="personal">
-                      Personal Message (Direct to Bot)
-                    </option>
-                    <option value="group">Telegram Group</option>
-                    <option value="channel">Telegram Channel</option>
+                    <option value="personal">Personal Messages</option>
+                    <option value="group">Group Chat</option>
+                    <option value="channel">Channel</option>
                   </select>
                 </div>
                 <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded-lg"
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center"
+                  onClick={handleSetup}
                 >
-                  <i className="fas fa-check mr-2"></i>Verify Bot & Continue
+                  <i className="fas fa-check mr-2"></i>Setup Bot
                 </button>
-              </form>
-            </div>
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6 mt-4">
-              <h5 className="text-lg font-bold mb-2">
-                <i className="fas fa-info-circle mr-2"></i>How it works
-              </h5>
-              <ol className="list-decimal pl-5">
-                <li className="mb-2">
-                  Create a bot with{" "}
-                  <a
-                    href="https://t.me/BotFather"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-400"
-                  >
-                    @BotFather
-                  </a>
-                </li>
-                <li className="mb-2">
-                  Enter your bot token above and choose where to receive alerts
-                </li>
-                <li className="mb-2">
-                  Use the unique authentication command provided in your bot
-                  chat
-                </li>
-                <li className="mb-2">
-                  Copy the generated webhook URL to your TradingView Alerts
-                </li>
-                <li>Receive formatted alerts automatically!</li>
-              </ol>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="md:col-span-2">
-              <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold">
-                    <i className="fas fa-robot mr-2"></i>Bot: @
-                    {dashboardData.user.bot_username}
-                  </h2>
-                  <span className="bg-green-500 px-2 py-1 rounded">
-                    Connected
-                  </span>
-                </div>
-                <div className="mb-4">
-                  <strong>Alert Type:</strong>
-                  <span className="bg-blue-500 px-2 py-1 rounded ml-2">
-                    {dashboardData.user.alert_type}
-                  </span>
-                </div>
-                <div className="mb-4">
-                  <strong>Status:</strong>
-                  {dashboardData.user.chat_id ? (
-                    <span className="bg-green-500 px-2 py-1 rounded ml-2">
-                      <i className="fas fa-check mr-1"></i>Ready to receive
-                      alerts
-                    </span>
-                  ) : (
-                    <span className="bg-yellow-500 px-2 py-1 rounded ml-2">
-                      <i className="fas fa-exclamation-triangle mr-1"></i>
-                      Waiting for authentication
-                    </span>
-                  )}
-                </div>
-                <div className="mb-4">
-                  <strong>Auth Command:</strong>
-                  <code className="bg-gray-700 p-1 rounded ml-2">
-                    {dashboardData.user.auth_command}
-                  </code>
-                </div>
-                <hr className="my-4" />
-                <h5 className="text-lg font-bold mb-2">
-                  <i className="fas fa-link mr-2"></i>TradingView Webhook URL
-                </h5>
-                <p className="text-gray-400 mb-2">
-                  Copy this URL to your TradingView alert settings:
-                </p>
-                <div className="flex">
-                  <input
-                    type="text"
-                    className="flex-grow p-2 bg-gray-700 rounded-l-lg font-mono"
-                    value={dashboardData.webhook_url}
-                    readOnly
-                  />
-                  <button
-                    className="bg-gray-600 hover:bg-gray-700 p-2 rounded-r-lg"
-                    onClick={(e) =>
-                      copyToClipboard(dashboardData.webhook_url, {
-                        current: e.target,
-                      })
-                    }
-                  >
-                    <i className="fas fa-copy"></i>
-                  </button>
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button
-                    className="bg-yellow-600 hover:bg-yellow-700 p-2 rounded"
-                    onClick={async () => {
-                      if (
-                        window.confirm(
-                          "This will change your webhook URL. Update TradingView accordingly."
-                        )
-                      ) {
-                        console.log(
-                          "Regenerating secret for:",
-                          `${BASE_URL}/api/user/${dashboardData.user.id}/regenerate_secret`
-                        );
-                        await axios.post(
-                          `${BASE_URL}/api/user/${dashboardData.user.id}/regenerate_secret`
-                        );
-                        fetchDashboard(dashboardData.user.id);
-                        addFlashMessage("Secret key regenerated successfully!");
-                      }
-                    }}
-                  >
-                    <i className="fas fa-sync mr-1"></i>Regenerate Secret
-                  </button>
-                  <a
-                    href="/"
-                    className="bg-gray-600 hover:bg-gray-700 p-2 rounded"
-                  >
-                    <i className="fas fa-edit mr-1"></i>Edit Bot Settings
-                  </a>
-                </div>
               </div>
             </div>
-            <div>
-              <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                <h5 className="text-lg font-bold mb-2">
-                  <i className="fas fa-key mr-2"></i>Authentication Required
-                </h5>
-                {dashboardData.user.chat_id ? (
-                  <div className="bg-green-500 p-4 rounded">
-                    <h6 className="font-bold">
-                      <i className="fas fa-check-circle mr-2"></i>Authenticated!
-                    </h6>
-                    <p>
-                      Your {dashboardData.user.alert_type} is ready to receive
-                      alerts.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-yellow-500 p-4 rounded">
-                    <h6 className="font-bold">
-                      <i className="fas fa-exclamation-triangle mr-2"></i>Action
-                      Required
-                    </h6>
-                    <p className="mb-2">To activate your bot:</p>
-                    <ol className="list-decimal pl-5 mb-3">
-                      {dashboardData.user.alert_type === "personal" ? (
-                        <>
-                          <li>
-                            Start a chat with{" "}
-                            <strong>@{dashboardData.user.bot_username}</strong>
-                          </li>
-                          <li>Send this exact command:</li>
-                        </>
-                      ) : dashboardData.user.alert_type === "group" ? (
-                        <>
-                          <li>
-                            Add{" "}
-                            <strong>@{dashboardData.user.bot_username}</strong>{" "}
-                            to your group
-                          </li>
-                          <li>In the group, send this exact command:</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>
-                            Add{" "}
-                            <strong>@{dashboardData.user.bot_username}</strong>{" "}
-                            to your channel
-                          </li>
-                          <li>
-                            Make the bot an admin with "Post Messages"
-                            permission
-                          </li>
-                          <li>In the channel, send this exact command:</li>
-                        </>
-                      )}
-                    </ol>
-                    <div className="bg-gray-700 p-4 rounded flex items-center">
-                      <code
-                        id="auth-command-text"
-                        className="text-green-400 flex-grow"
-                      >
-                        {dashboardData.user.auth_command}
-                      </code>
-                      <button
-                        className="bg-gray-600 hover:bg-gray-700 p-2 rounded"
-                        onClick={(e) =>
-                          copyToClipboard(dashboardData.user.auth_command, {
-                            current: e.target,
-                          })
-                        }
-                      >
-                        <i className="fas fa-copy"></i>
-                      </button>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-2">
-                      <i className="fas fa-info-circle mr-1"></i>
-                      This unique command is specific to your bot for security.
-                    </p>
-                  </div>
-                )}
-                <hr className="my-4" />
-                <h6 className="font-bold">
-                  <i className="fas fa-chart-line mr-2"></i>TradingView Setup
-                </h6>
-                <ol className="list-decimal pl-5 text-sm">
-                  <li>Open your TradingView alert</li>
-                  <li>Go to "Notifications" tab</li>
-                  <li>Check "Webhook URL"</li>
-                  <li>Paste your webhook URL</li>
-                  <li>Set method to POST</li>
-                  <li>Save your alert</li>
-                </ol>
-              </div>
-              {dashboardData.alerts?.length > 0 && (
-                <div className="bg-gray-800 rounded-lg shadow-lg p-6 mt-4">
-                  <h6 className="font-bold mb-2">
-                    <i className="fas fa-history mr-2"></i>Recent Alerts
-                  </h6>
-                  {dashboardData.alerts.slice(-5).map((alert, index) => (
-                    <div
-                      key={index}
-                      className="flex justify-between items-center mb-2"
-                    >
-                      <small className="text-gray-400">
-                        {alert.created_at}
-                      </small>
-                      <span
-                        className={`px-2 py-1 rounded ${
-                          alert.sent_successfully
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                        }`}
-                      >
-                        {alert.sent_successfully ? "Sent" : "Failed"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
-        )}
-      </main>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default App;
+// Dashboard Component
+const Dashboard = () => {
+  const { userId } = useParams();
+  const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
+  const [recentAlerts, setRecentAlerts] = useState([]);
+  const [flashMessages, setFlashMessages] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const response = await axiosInstance.get(`/dashboard/${userId}`);
+        if (response.headers["x-session-id"]) {
+          localStorage.setItem(
+            "x-session-id",
+            response.headers["x-session-id"]
+          );
+          axiosInstance.defaults.headers["X-Session-ID"] =
+            response.headers["x-session-id"];
+        }
+        // Parse HTML response to extract data (since server returns HTML)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(response.data, "text/html");
+        const botUsername =
+          doc
+            .querySelector(".navbar-brand")
+            ?.textContent.match(/@(\w+)/)?.[1] || "Unknown";
+        const authStatusEl = doc.querySelector(".alert");
+        const authStatus = authStatusEl
+          ? {
+              type: authStatusEl.classList.contains("alert-warning")
+                ? "warning"
+                : authStatusEl.classList.contains("alert-success")
+                ? "success"
+                : "info",
+              content: authStatusEl.innerHTML,
+            }
+          : null;
+        const webhookUrl = doc.querySelector("#webhook-url")?.textContent || "";
+        const alertsEls = doc.querySelectorAll(".alert.py-2.mb-2");
+        const alerts = Array.from(alertsEls).map((el) => ({
+          webhookData:
+            el.querySelector("small")?.textContent.split(" - ")[1] || "",
+          sentSuccessfully: el.classList.contains("alert-success"),
+          createdAt:
+            el.querySelector("small")?.textContent.split(" - ")[0] || "",
+        }));
+
+        setUserData({ botUsername, authStatus, webhookUrl, userId });
+        setRecentAlerts(alerts);
+      } catch (err) {
+        setError(
+          err.response?.status === 404 ? "User not found" : "An error occurred"
+        );
+      }
+    };
+    fetchDashboardData();
+  }, [userId]);
+
+  const handleRegenerateSecret = async () => {
+    try {
+      const response = await axiosInstance.get(`/regenerate/${userId}`);
+      if (response.headers["x-session-id"]) {
+        localStorage.setItem("x-session-id", response.headers["x-session-id"]);
+        axiosInstance.defaults.headers["X-Session-ID"] =
+          response.headers["x-session-id"];
+      }
+      setFlashMessages([
+        { message: "Secret key regenerated successfully!", type: "success" },
+      ]);
+      // Refresh dashboard data
+      navigate(0); // Reload current route
+    } catch (error) {
+      setFlashMessages([
+        { message: "Failed to regenerate secret key", type: "error" },
+      ]);
+    }
+  };
+
+  const copyWebhook = () => {
+    if (userData?.webhookUrl) {
+      navigator.clipboard.writeText(userData.webhookUrl).then(() => {
+        const icon = document.querySelector(".copy-btn");
+        icon.className = "fas fa-check copy-btn ml-2";
+        setTimeout(() => {
+          icon.className = "fas fa-copy copy-btn ml-2";
+        }, 2000);
+      });
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">{error}</h1>
+          <a
+            href="/"
+            className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Go Home
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userData) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white">
+      <nav className="bg-gray-800 p-4">
+        <div className="container mx-auto flex justify-between items-center">
+          <span className="text-xl font-bold">
+            <i className="fas fa-robot mr-2"></i>TradingView Bot
+          </span>
+          <a
+            href="/"
+            className="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 text-sm"
+          >
+            New Bot
+          </a>
+        </div>
+      </nav>
+      <div className="container mx-auto mt-4 px-4">
+        <FlashMessages
+          messages={flashMessages}
+          setMessages={setFlashMessages}
+        />
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <div className="bg-gray-800 rounded-lg">
+              <div className="p-4 border-b border-gray-700">
+                <h4 className="text-lg font-semibold">
+                  <i className="fas fa-robot mr-2"></i>Bot: @
+                  {userData.botUsername}
+                </h4>
+              </div>
+              <div className="p-4">
+                {userData.authStatus && (
+                  <div
+                    className={`p-4 rounded-lg ${
+                      userData.authStatus.type === "warning"
+                        ? "bg-yellow-600"
+                        : userData.authStatus.type === "success"
+                        ? "bg-green-600"
+                        : "bg-blue-600"
+                    }`}
+                    dangerouslySetInnerHTML={{
+                      __html: userData.authStatus.content,
+                    }}
+                  />
+                )}
+                <div className="mt-4">
+                  <h6 className="text-sm font-medium">
+                    Webhook URL for TradingView:
+                  </h6>
+                  <div className="bg-gray-700 border border-gray-600 p-3 rounded flex justify-between items-center">
+                    <code id="webhook-url">{userData.webhookUrl}</code>
+                    <i
+                      className="fas fa-copy copy-btn ml-2 cursor-pointer"
+                      onClick={copyWebhook}
+                      title="Copy to clipboard"
+                    ></i>
+                  </div>
+                  <small className="text-gray-400">
+                    Copy this URL and use it in your TradingView alert webhook
+                    settings.
+                  </small>
+                </div>
+                <div className="mt-4">
+                  <button
+                    className="bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700 flex items-center text-sm"
+                    onClick={handleRegenerateSecret}
+                  >
+                    <i className="fas fa-sync mr-2"></i>Regenerate Secret
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="w-full md:w-1/3">
+            <div className="bg-gray-800 rounded-lg">
+              <div className="p-4 border-b border-gray-700">
+                <h6 className="text-sm font-medium">
+                  <i className="fas fa-chart-line mr-2"></i>Recent Alerts
+                </h6>
+              </div>
+              <div className="p-4">
+                {recentAlerts.length > 0 ? (
+                  recentAlerts.map((alert, index) => (
+                    <div
+                      key={index}
+                      className={`p-2 mb-2 rounded ${
+                        alert.sentSuccessfully ? "bg-green-600" : "bg-red-600"
+                      }`}
+                    >
+                      <small>
+                        <i
+                          className={`fas fa-${
+                            alert.sentSuccessfully ? "check" : "times"
+                          } mr-1`}
+                        ></i>
+                        {alert.createdAt} - {alert.webhookData}
+                      </small>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-400 mb-0">No alerts yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main App Component
+const App = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Setup />} />
+        <Route path="/dashboard/:userId" element={<Dashboard />} />
+        <Route
+          path="*"
+          element={
+            <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold">Page Not Found</h1>
+                <a
+                  href="/"
+                  className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Go Home
+                </a>
+              </div>
+            </div>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+};
+
+// Render the app
+const root = createRoot(document.getElementById("root"));
+root.render(<App />);
