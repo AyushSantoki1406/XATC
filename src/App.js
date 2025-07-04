@@ -75,18 +75,22 @@ const Setup = () => {
         axiosInstance.defaults.headers["X-Session-ID"] =
           response.headers["x-session-id"];
       }
-      setFlashMessages([
-        { message: "Bot configured successfully!", type: "success" },
-      ]);
-      // Redirect to dashboard (server redirects to /dashboard/:userId)
-      const userId =
-        response.headers.location?.match(/\/dashboard\/(\d+)/)?.[1];
+      const { userId, flashMessages } = response.data;
+      setFlashMessages(
+        flashMessages || [
+          { message: "Bot configured successfully!", type: "success" },
+        ]
+      );
       if (userId) navigate(`/dashboard/${userId}`);
     } catch (error) {
       const errorMsg =
         error.response?.data?.error ||
         "An error occurred while setting up the bot";
-      setFlashMessages([{ message: errorMsg, type: "error" }]);
+      const flashMessages = error.response?.data?.flashMessages || [];
+      setFlashMessages([
+        ...flashMessages,
+        { message: errorMsg, type: "error" },
+      ]);
     }
   };
 
@@ -180,36 +184,16 @@ const Dashboard = () => {
           axiosInstance.defaults.headers["X-Session-ID"] =
             response.headers["x-session-id"];
         }
-        // Parse HTML response to extract data (since server returns HTML)
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(response.data, "text/html");
-        const botUsername =
-          doc
-            .querySelector(".navbar-brand")
-            ?.textContent.match(/@(\w+)/)?.[1] || "Unknown";
-        const authStatusEl = doc.querySelector(".alert");
-        const authStatus = authStatusEl
-          ? {
-              type: authStatusEl.classList.contains("alert-warning")
-                ? "warning"
-                : authStatusEl.classList.contains("alert-success")
-                ? "success"
-                : "info",
-              content: authStatusEl.innerHTML,
-            }
-          : null;
-        const webhookUrl = doc.querySelector("#webhook-url")?.textContent || "";
-        const alertsEls = doc.querySelectorAll(".alert.py-2.mb-2");
-        const alerts = Array.from(alertsEls).map((el) => ({
-          webhookData:
-            el.querySelector("small")?.textContent.split(" - ")[1] || "",
-          sentSuccessfully: el.classList.contains("alert-success"),
-          createdAt:
-            el.querySelector("small")?.textContent.split(" - ")[0] || "",
-        }));
-
+        const {
+          botUsername,
+          authStatus,
+          webhookUrl,
+          recentAlerts,
+          flashMessages,
+        } = response.data;
         setUserData({ botUsername, authStatus, webhookUrl, userId });
-        setRecentAlerts(alerts);
+        setRecentAlerts(recentAlerts || []);
+        setFlashMessages(flashMessages || []);
       } catch (err) {
         setError(
           err.response?.status === 404 ? "User not found" : "An error occurred"
@@ -227,14 +211,21 @@ const Dashboard = () => {
         axiosInstance.defaults.headers["X-Session-ID"] =
           response.headers["x-session-id"];
       }
-      setFlashMessages([
-        { message: "Secret key regenerated successfully!", type: "success" },
-      ]);
+      const { flashMessages } = response.data;
+      setFlashMessages(
+        flashMessages || [
+          { message: "Secret key regenerated successfully!", type: "success" },
+        ]
+      );
       // Refresh dashboard data
-      navigate(0); // Reload current route
+      navigate(0);
     } catch (error) {
+      const errorMsg =
+        error.response?.data?.error || "Failed to regenerate secret key";
+      const flashMessages = error.response?.data?.flashMessages || [];
       setFlashMessages([
-        { message: "Failed to regenerate secret key", type: "error" },
+        ...flashMessages,
+        { message: errorMsg, type: "error" },
       ]);
     }
   };
@@ -315,7 +306,7 @@ const Dashboard = () => {
                         : "bg-blue-600"
                     }`}
                     dangerouslySetInnerHTML={{
-                      __html: userData.authStatus.content,
+                      __html: userData.authStatus.message,
                     }}
                   />
                 )}
@@ -369,7 +360,8 @@ const Dashboard = () => {
                             alert.sentSuccessfully ? "check" : "times"
                           } mr-1`}
                         ></i>
-                        {alert.createdAt} - {alert.webhookData}
+                        {new Date(alert.createdAt).toLocaleString()} -{" "}
+                        {alert.webhookData}
                       </small>
                     </div>
                   ))
@@ -413,5 +405,7 @@ const App = () => {
   );
 };
 
-
+// Render the app
+const root = createRoot(document.getElementById("root"));
+root.render(<App />);
 export default App
