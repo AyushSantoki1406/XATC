@@ -413,6 +413,5 @@ const App = () => {
   );
 };
 
-// Render the app
-const root = createRoot(document.getElementById("root"));
-root.render(<App />);
+
+export default App
